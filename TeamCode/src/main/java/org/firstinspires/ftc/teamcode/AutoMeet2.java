@@ -5,7 +5,6 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
@@ -14,12 +13,12 @@ import com.qualcomm.robotcore.util.Range;
 public class AutoMeet2 extends LinearOpMode {
 
     // DRIVE CONSTANTS
-    private static final double TICKS_PER_REV = 537.6;
-    private static final double WHEEL_DIAMETER_INCHES = 4.0;
+    private static final double TICKS_PER_REV = 384.5;   // goBILDA 5203 13.7:1 (435 RPM) encoder ticks per output rev
+    private static final double WHEEL_DIAMETER_INCHES = 104.0 / 25.4;   // 104 mm mecanum wheel = 4.094 in
     private static final double GEAR_RATIO = 1.0;
     private static final double CORRECTION_VALUE = 0.92;
     private static final double STRAFE_MULTIPLIER = 1.1;
-    private static final double DRIVE_SPEED = 0.5;
+    private static final double DRIVE_SPEED = 0.85;
 
     private static final double TICKS_PER_INCH =
             (TICKS_PER_REV * GEAR_RATIO /
@@ -54,8 +53,12 @@ public class AutoMeet2 extends LinearOpMode {
 
     private static final double FEEDER_POWER = 0.85;
 
-    private static final double SHOOTER_READY_TIMEOUT = 3000;
+    private static final double SHOOTER_READY_TIMEOUT = 1000;
     private static final double SHOOTING_TIME = 4000;
+    // Leave SHOOT after this long even if the shooter never reaches TARGET_RPM
+    private static final double MAX_SHOOT_TIME = 6000;
+    // Give up on a move after this long (e.g. a wheel stalled against a wall)
+    private static final double MOVE_TIMEOUT = 3000;
 
     private boolean shooterEnabled = false;
     private boolean atTargetSpeed = false;
@@ -66,6 +69,7 @@ public class AutoMeet2 extends LinearOpMode {
 
     // TIMERS
     private ElapsedTime runtime = new ElapsedTime();
+    private ElapsedTime shootStateTimer = new ElapsedTime();
 
     private boolean shootingTimerStarted = false;
 
@@ -74,7 +78,7 @@ public class AutoMeet2 extends LinearOpMode {
         START,
         MOVE_FORWARD,
         SHOOT,
-        TURN_TO_RIGHT,
+        STRAFE_RIGHT,
         FORWARD,
         PARK,
         STOP,
@@ -115,7 +119,6 @@ public class AutoMeet2 extends LinearOpMode {
 
                     if (atTargetSpeed ||
                             runtime.milliseconds() > SHOOTER_READY_TIMEOUT) {
-
                         state = AutoState.MOVE_FORWARD;
                         runtime.reset();
                     }
@@ -129,11 +132,12 @@ public class AutoMeet2 extends LinearOpMode {
                         moveStarted = true;
                     }
 
-                    if (driveCompleted()) {
+                    if (moveFinished()) {
                         stopDrive();
                         moveStarted = false;
                         state = AutoState.SHOOT;
                         runtime.reset();
+                        shootStateTimer.reset();
                         shootingTimerStarted = false;
                     }
 
@@ -148,16 +152,17 @@ public class AutoMeet2 extends LinearOpMode {
                         shootingTimerStarted = true;
                     }
 
-                    if (shootingTimerStarted &&
-                            runtime.milliseconds() > SHOOTING_TIME) {
+                    if ((shootingTimerStarted &&
+                            runtime.milliseconds() > SHOOTING_TIME)
+                            || shootStateTimer.milliseconds() > MAX_SHOOT_TIME) {
 
-                        state = AutoState.TURN_TO_RIGHT;
+                        state = AutoState.STRAFE_RIGHT;
                         runtime.reset();
                     }
 
                     break;
 
-                case TURN_TO_RIGHT:
+                case STRAFE_RIGHT:
 
                     shooterEnabled = false;
 
@@ -166,7 +171,7 @@ public class AutoMeet2 extends LinearOpMode {
                         moveStarted = true;
                     }
 
-                    if (driveCompleted()) {
+                    if (moveFinished()) {
                         stopDrive();
                         moveStarted = false;
                         state = AutoState.FORWARD;
@@ -182,7 +187,7 @@ public class AutoMeet2 extends LinearOpMode {
                         moveStarted = true;
                     }
 
-                    if (driveCompleted()) {
+                    if (moveFinished()) {
                         stopDrive();
                         moveStarted = false;
                         state = AutoState.PARK;
@@ -194,11 +199,11 @@ public class AutoMeet2 extends LinearOpMode {
                 case PARK:
 
                     if (!moveStarted) {
-                        strafe(13, DRIVE_SPEED);
+                        strafe(11, DRIVE_SPEED);   // was 13 then -2; combined into one move
                         moveStarted = true;
                     }
 
-                    if (driveCompleted()) {
+                    if (moveFinished()) {
                         stopDrive();
                         moveStarted = false;
                         state = AutoState.STOP;
@@ -209,18 +214,9 @@ public class AutoMeet2 extends LinearOpMode {
 
                 case STOP:
 
-                    if (!moveStarted) {
-                        strafe(-2, DRIVE_SPEED);
-                        moveStarted = true;
-                    }
-
-                    if (driveCompleted()) {
-                        stopDrive();
-                        moveStarted = false;
-                        shooterEnabled = false;
-                        stopAllMotors();
-                        state = AutoState.DONE;
-                    }
+                    shooterEnabled = false;
+                    stopAllMotors();
+                    state = AutoState.DONE;
 
                     break;
 
@@ -367,6 +363,10 @@ public class AutoMeet2 extends LinearOpMode {
             motor.setMode(
                     DcMotor.RunMode.RUN_USING_ENCODER
             );
+
+            // Finish moves sooner: count a wheel as done within ~0.5 in
+            // instead of the default 5 ticks, skipping the slow crawl at the end.
+            motor.setTargetPositionTolerance(15);
         }
 
         intake.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
@@ -452,6 +452,13 @@ public class AutoMeet2 extends LinearOpMode {
                 && !frontRight.isBusy()
                 && !backLeft.isBusy()
                 && !backRight.isBusy();
+    }
+
+    // A move is finished when every wheel reaches its target, or after
+    // MOVE_TIMEOUT so one stalled wheel can't freeze the rest of auto.
+    // Relies on runtime being reset each time the state changes.
+    private boolean moveFinished() {
+        return driveCompleted() || runtime.milliseconds() > MOVE_TIMEOUT;
     }
 
     private void stopDrive() {
