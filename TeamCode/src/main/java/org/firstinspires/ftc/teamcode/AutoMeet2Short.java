@@ -59,6 +59,8 @@ public class AutoMeet2Short extends LinearOpMode {
     private static final double MAX_SHOOT_TIME = 6000;
     // Give up on a move after this long (e.g. a wheel stalled against a wall)
     private static final double MOVE_TIMEOUT = 3000;
+    // Pause after arriving at the shooting spot before feeding
+    private static final double SETTLE_TIME = 300;
     private static final double WAIT_TIME = 0;
 
     private boolean shooterEnabled = false;
@@ -131,7 +133,8 @@ public class AutoMeet2Short extends LinearOpMode {
                 case MOVE_FORWARD:
 
                     if (!moveStarted) {
-                        drive(-7, DRIVE_SPEED);
+                        // 10 in with the corrected TICKS_PER_REV = the old tuned "-7"
+                        drive(-10, DRIVE_SPEED);
                         moveStarted = true;
                     }
 
@@ -156,9 +159,11 @@ public class AutoMeet2Short extends LinearOpMode {
                     break;
                 case SHOOT:
 
-                    feedRequested = true;
+                    // Let the robot stop rocking before the first ball is fed
+                    feedRequested =
+                            shootStateTimer.milliseconds() > SETTLE_TIME;
 
-                    if (atTargetSpeed && !shootingTimerStarted) {
+                    if (feedRequested && atTargetSpeed && !shootingTimerStarted) {
                         runtime.reset();
                         shootingTimerStarted = true;
                     }
@@ -178,7 +183,7 @@ public class AutoMeet2Short extends LinearOpMode {
                     shooterEnabled = false;
 
                     if (!moveStarted) {
-                        strafe(-30, DRIVE_SPEED);
+                        strafe(-42.9, DRIVE_SPEED);   // = old tuned -30
                         moveStarted = true;
                     }
 
@@ -194,7 +199,7 @@ public class AutoMeet2Short extends LinearOpMode {
                 case FORWARD:
 
                     if (!moveStarted) {
-                        drive(-20, DRIVE_SPEED);
+                        drive(-28.6, DRIVE_SPEED);   // = old tuned -20
                         moveStarted = true;
                     }
 
@@ -210,7 +215,7 @@ public class AutoMeet2Short extends LinearOpMode {
                 case PARK:
 
                     if (!moveStarted) {
-                        strafe(20, DRIVE_SPEED);
+                        strafe(28.6, DRIVE_SPEED);   // = old tuned 20 (PARK is not used right now)
                         moveStarted = true;
                     }
 
@@ -226,7 +231,7 @@ public class AutoMeet2Short extends LinearOpMode {
                 case STOP:
 
                     if (!moveStarted) {
-                        strafe(-2, DRIVE_SPEED);
+                        strafe(-2.9, DRIVE_SPEED);   // = old tuned -2
                         moveStarted = true;
                     }
 
