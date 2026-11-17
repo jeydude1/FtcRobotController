@@ -45,6 +45,11 @@ public class Meet_2_TeleOp extends LinearOpMode {
 
     private static final double FEEDER_POWER = 0.85;
 
+    // Active flywheel brake: after the shooter is turned off, apply a little
+    // reverse power until it slows below BRAKE_STOP_RPM, then let BRAKE finish.
+    private static final double BRAKE_POWER = -0.3;
+    private static final double BRAKE_STOP_RPM = 300.0;
+
     private boolean shooterEnabled = false;
 
     // ================= DRIVE =================
@@ -99,7 +104,8 @@ public class Meet_2_TeleOp extends LinearOpMode {
         intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-        // Never actively brake the flywheel when power is zero.
+        // BRAKE so the flywheel stops quickly once the shooter is turned off
+        // (a coasting flywheel throws out balls the intake brings in).
         shooter.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
         telemetry.addLine("Meet 2 TeleOp Ready");
@@ -232,9 +238,15 @@ public class Meet_2_TeleOp extends LinearOpMode {
                 );
             }
 
+            boolean shooterBraking =
+                    !shooterEnabled && currentRPM > BRAKE_STOP_RPM;
+
             // Reverse shooter while right trigger is held
             if (gamepad2.right_trigger > 0.1 && !shooterEnabled) {
                 shooter.setPower(-0.5);
+            } else if (shooterBraking) {
+                // Shooter just turned off: actively slow the flywheel down
+                shooter.setPower(BRAKE_POWER);
             } else {
                 shooter.setPower(shooterPower);
             }
@@ -327,7 +339,7 @@ public class Meet_2_TeleOp extends LinearOpMode {
                             ? (atTargetSpeed
                                 ? "READY TO FIRE!"
                                 : "SPINNING UP / RECOVERING")
-                            : "OFF"
+                            : (shooterBraking ? "STOPPING" : "OFF")
             );
 
             telemetry.addData(
