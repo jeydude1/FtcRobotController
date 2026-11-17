@@ -1,272 +1,364 @@
 package org.firstinspires.ftc.teamcode;
 
-import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
-import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
-@Autonomous(name = "Auto Meet 2 Short", group = "Autonomous")
-public class AutoMeet2Short extends LinearOpMode {
+@TeleOp(name = "Meet 2 TeleOp", group = "TeleOp")
+public class Meet_2_TeleOp extends LinearOpMode {
 
-    // DRIVE CONSTANTS
-    private static final double TICKS_PER_REV = 384.5;   // goBILDA 5203 13.7:1 (435 RPM) encoder ticks per output rev
-    private static final double WHEEL_DIAMETER_INCHES = 104.0 / 25.4;   // 104 mm mecanum wheel = 4.094 in
-    private static final double GEAR_RATIO = 1.0;
-    private static final double CORRECTION_VALUE = 0.92;
-    private static final double STRAFE_MULTIPLIER = 1.1;
-    private static final double DRIVE_SPEED = 0.85;
+    // ================= HARDWARE =================
 
-    private static final double TICKS_PER_INCH =
-            (TICKS_PER_REV * GEAR_RATIO /
-            (Math.PI * WHEEL_DIAMETER_INCHES))
-            * CORRECTION_VALUE;
+    private DcMotor frontLeft;
+    private DcMotor frontRight;
+    private DcMotor backLeft;
+    private DcMotor backRight;
 
-    // HARDWARE
-    private DcMotorEx frontLeft;
-    private DcMotorEx frontRight;
-    private DcMotorEx backLeft;
-    private DcMotorEx backRight;
-
-    private DcMotorEx intake;
+    private DcMotor intake;
     private DcMotorEx shooter;
-    private DcMotorEx spinner;
+    private DcMotor spinner;
 
+    private Servo blocker;
     private VoltageSensor batteryVoltageSensor;
 
+    private static final double BLOCKER_DOWN = 0.2;
+    private static final double BLOCKER_UP = 0.35;
 
-    // SHOOTER VELOCITY CONTROLLER
-    // Same settings as TeleOp
+    // ================= SHOOTER CONSTANTS =================
 
-    private static final double SHOOTER_TICKS_PER_REV = 28.0;
+    private static final double TICKS_PER_REV = 28.0;
     private static final double MAX_ACHIEVABLE_RPM = 5200.0;
+
+    private double targetRPM = 2200.0;
+    private double rpmTolerance = 90.0;
 
     private static final double kV = 1.0 / MAX_ACHIEVABLE_RPM;
     private static final double kS = 0.04;
     private static final double kP = 0.0012;
 
-    private static final double TARGET_RPM = 2200.0;
-    private static final double RPM_TOLERANCE = 90.0;
-
     private static final double FEEDER_POWER = 0.85;
 
-    private static final double SHOOTER_READY_TIMEOUT = 1000;
-    private static final double SHOOTING_TIME = 4000;
-    // Leave SHOOT after this long even if the shooter never reaches TARGET_RPM
-    private static final double MAX_SHOOT_TIME = 6000;
-    // Give up on a move after this long (e.g. a wheel stalled against a wall)
-    private static final double MOVE_TIMEOUT = 3000;
-    private static final double WAIT_TIME = 0;
+    // Active flywheel brake: after the shooter is turned off, apply a little
+    // reverse power until it slows below BRAKE_STOP_RPM, then let BRAKE finish.
+    private static final double BRAKE_POWER = -0.3;
+    private static final double BRAKE_STOP_RPM = 300.0;
 
     private boolean shooterEnabled = false;
-    private boolean atTargetSpeed = false;
 
-    private double currentRPM = 0;
-    private double rpmError = 0;
-    private double shooterPower = 0;
+    // ================= DRIVE =================
 
-    // TIMERS
     private ElapsedTime runtime = new ElapsedTime();
-    private ElapsedTime shootStateTimer = new ElapsedTime();
 
-    private boolean shootingTimerStarted = false;
-
-    // AUTONOMOUS STATES
-    private enum AutoState {
-        START,
-        MOVE_FORWARD,
-        WAIT,
-        SHOOT,
-        STRAFE_RIGHT,
-        FORWARD,
-        PARK,
-        STOP,
-        DONE
-    }
-
-    private AutoState state = AutoState.START;
-    private boolean moveStarted = false;
-
-    // MAIN AUTONOMOUS
     @Override
     public void runOpMode() {
 
-        initDrive();
+        // ================= HARDWARE INITIALIZATION =================
 
-        telemetry.addLine("Auto Meet 2 Ready");
-        telemetry.addLine("Velocity Shooter Ready");
+        frontLeft = hardwareMap.get(DcMotor.class, "frontleft");
+        frontRight = hardwareMap.get(DcMotor.class, "frontright");
+        backLeft = hardwareMap.get(DcMotor.class, "backleft");
+        backRight = hardwareMap.get(DcMotor.class, "backright");
+
+        intake = hardwareMap.get(DcMotor.class, "intake");
+        shooter = hardwareMap.get(DcMotorEx.class, "shooter");
+        spinner = hardwareMap.get(DcMotor.class, "spinner");
+
+        blocker = hardwareMap.get(Servo.class, "blocker");
+
+        batteryVoltageSensor =
+                hardwareMap.voltageSensor.iterator().next();
+
+        // ================= MOTOR DIRECTIONS =================
+
+        frontLeft.setDirection(DcMotor.Direction.REVERSE);
+        backLeft.setDirection(DcMotor.Direction.REVERSE);
+
+        shooter.setDirection(DcMotorSimple.Direction.FORWARD);
+
+        // ================= MOTOR MODES =================
+
+        frontLeft.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        frontRight.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backLeft.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backRight.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        // Shooter uses direct power control.
+        // Encoder velocity is still available through getVelocity().
+
+        shooter.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+
+        // ================= ZERO POWER BEHAVIOR =================
+
+        frontLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        frontRight.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        backLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        backRight.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+        intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+        // BRAKE so the flywheel stops quickly once the shooter is turned off
+        // (a coasting flywheel throws out balls the intake brings in).
+        shooter.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+        telemetry.addLine("Meet 2 TeleOp Ready");
+        telemetry.addLine("Shooter RPM Controller Ready");
         telemetry.update();
 
         waitForStart();
 
-        if (isStopRequested()) {
-            stopAllMotors();
-            return;
-        }
+        // ================= MAIN LOOP =================
 
-        runtime.reset();
+        while (opModeIsActive()) {
 
-        while (opModeIsActive() && state != AutoState.DONE) {
+            // =====================================================
+            // MECANUM DRIVE
+            // =====================================================
 
-            boolean feedRequested = false;
+            double y = -gamepad1.left_stick_y;
+            double x = gamepad1.left_stick_x;
+            double rx = gamepad1.right_stick_x;
 
-            switch (state) {
+            double frontLeftPower = y + x + rx;
+            double backLeftPower = y - x + rx;
+            double frontRightPower = y - x - rx;
+            double backRightPower = y + x - rx;
 
-                case START:
+            double max = Math.max(
+                    1.0,
+                    Math.max(
+                            Math.max(
+                                    Math.abs(frontLeftPower),
+                                    Math.abs(backLeftPower)
+                            ),
+                            Math.max(
+                                    Math.abs(frontRightPower),
+                                    Math.abs(backRightPower)
+                            )
+                    )
+            );
 
-                    shooterEnabled = true;
+            frontLeftPower /= max;
+            backLeftPower /= max;
+            frontRightPower /= max;
+            backRightPower /= max;
 
-                    if (atTargetSpeed ||
-                            runtime.milliseconds() > SHOOTER_READY_TIMEOUT) {
+            // Slow mode
+            double speed = gamepad1.left_bumper ? 0.4 : 1.0;
 
-                        state = AutoState.MOVE_FORWARD;
-                        runtime.reset();
-                    }
+            frontLeft.setPower(frontLeftPower * speed);
+            backLeft.setPower(backLeftPower * speed);
+            frontRight.setPower(frontRightPower * speed);
+            backRight.setPower(backRightPower * speed);
 
-                    break;
+            // =====================================================
+            // SHOOTER BUTTON CONTROLS
+            // =====================================================
 
-                case MOVE_FORWARD:
-
-                    if (!moveStarted) {
-                        drive(-7, DRIVE_SPEED);
-                        moveStarted = true;
-                    }
-
-                    if (moveFinished()) {
-                        stopDrive();
-                        moveStarted = false;
-                        state = AutoState.WAIT;
-                        runtime.reset();
-                        shootingTimerStarted = false;
-                    }
-
-                    break;
-                case WAIT:
-                    
-                    if (runtime.milliseconds() > WAIT_TIME) {
-                        
-                        state = AutoState.SHOOT;
-                        runtime.reset();
-                        shootStateTimer.reset();
-                    }
-
-                    break;
-                case SHOOT:
-
-                    feedRequested = true;
-
-                    if (atTargetSpeed && !shootingTimerStarted) {
-                        runtime.reset();
-                        shootingTimerStarted = true;
-                    }
-
-                    if ((shootingTimerStarted &&
-                            runtime.milliseconds() > SHOOTING_TIME)
-                            || shootStateTimer.milliseconds() > MAX_SHOOT_TIME) {
-
-                        state = AutoState.STRAFE_RIGHT;
-                        runtime.reset();
-                    }
-
-                    break;
-
-                case STRAFE_RIGHT:
-
-                    shooterEnabled = false;
-
-                    if (!moveStarted) {
-                        strafe(-30, DRIVE_SPEED);
-                        moveStarted = true;
-                    }
-
-                    if (moveFinished()) {
-                        stopDrive();
-                        moveStarted = false;
-                        state = AutoState.FORWARD;
-                        runtime.reset();
-                    }
-
-                    break;
-
-                case FORWARD:
-
-                    if (!moveStarted) {
-                        drive(-20, DRIVE_SPEED);
-                        moveStarted = true;
-                    }
-
-                    if (moveFinished()) {
-                        stopDrive();
-                        moveStarted = false;
-                        state = AutoState.STOP;
-                        runtime.reset();
-                    }
-
-                    break;
-
-                case PARK:
-
-                    if (!moveStarted) {
-                        strafe(20, DRIVE_SPEED);
-                        moveStarted = true;
-                    }
-
-                    if (moveFinished()) {
-                        stopDrive();
-                        moveStarted = false;
-                        state = AutoState.STOP;
-                        runtime.reset();
-                    }
-
-                    break;
-
-                case STOP:
-
-                    if (!moveStarted) {
-                        strafe(-2, DRIVE_SPEED);
-                        moveStarted = true;
-                    }
-
-                    if (moveFinished()) {
-                        stopDrive();
-                        moveStarted = false;
-                        shooterEnabled = false;
-                        stopAllMotors();
-                        state = AutoState.DONE;
-                    }
-
-                    break;
-
-                case DONE:
-                    break;
+            // Toggle shooter ON/OFF
+            if (gamepad2.leftBumperWasPressed()) {
+                shooterEnabled = !shooterEnabled;
             }
 
-            updateShooter(feedRequested);
+            // Increase target RPM
+            if (gamepad2.dpad_up) {
+                targetRPM += 50;
+            }
 
-            telemetry.addLine("===== AUTONOMOUS =====");
-            telemetry.addData("State", state);
+            // Decrease target RPM
+            if (gamepad2.dpad_down) {
+                targetRPM -= 50;
+            }
+
+            // Keep target within a reasonable tuning range
+            targetRPM = Range.clip(targetRPM, 0, MAX_ACHIEVABLE_RPM);
+
+            // Stop shooter
+            if (gamepad2.leftTriggerWasPressed()) {
+                shooterEnabled = false;
+                shooter.setPower(0);
+                spinner.setPower(0);
+                intake.setPower(0);
+                blocker.setPosition(BLOCKER_UP);
+            }
+
+            // =====================================================
+            // READ SHOOTER RPM
+            // =====================================================
+
+            double currentTicksPerSec = shooter.getVelocity();
+
+            double currentRPM =
+                    (currentTicksPerSec * 60.0) / TICKS_PER_REV;
+
+            double rpmError = targetRPM - currentRPM;
+
+            boolean atTargetSpeed =
+                    Math.abs(rpmError) <= rpmTolerance;
+
+            // =====================================================
+            // SHOOTER FEEDFORWARD + P CONTROLLER
+            // =====================================================
+
+            double shooterPower = 0.0;
+
+            if (shooterEnabled) {
+
+                // Feedforward
+                double feedforward =
+                        (targetRPM * kV) + kS;
+
+                // Proportional recovery
+                double proportional =
+                        rpmError * kP;
+
+                double desired12VPower =
+                        feedforward + proportional;
+
+                // Battery voltage compensation
+                double currentVoltage =
+                        batteryVoltageSensor.getVoltage();
+
+                double voltageScale =
+                        (currentVoltage > 8.0)
+                                ? (12.0 / currentVoltage)
+                                : 1.0;
+
+                shooterPower = Range.clip(
+                        desired12VPower * voltageScale,
+                        0.0,
+                        1.0
+                );
+            }
+
+            boolean shooterBraking =
+                    !shooterEnabled && currentRPM > BRAKE_STOP_RPM;
+
+            // Reverse shooter while right trigger is held
+            if (gamepad2.right_trigger > 0.1 && !shooterEnabled) {
+                shooter.setPower(-0.5);
+            } else if (shooterBraking) {
+                // Shooter just turned off: actively slow the flywheel down
+                shooter.setPower(BRAKE_POWER);
+            } else {
+                shooter.setPower(shooterPower);
+            }
+
+            // =====================================================
+            // INTAKE CONTROLS
+            // =====================================================
+
+            // Intake and spinner forward
+            if (gamepad1.rightBumperWasPressed()) {
+                intake.setPower(1.0);
+                spinner.setPower(1.0);
+            } else if (gamepad1.rightBumperWasReleased()) {
+                intake.setPower(0.0);
+                spinner.setPower(0.0);
+            }
+
+            // Reverse intake
+            if (gamepad1.rightTriggerWasPressed()) {
+                intake.setPower(-1.0);
+            } else if (gamepad1.rightTriggerWasReleased()) {
+                intake.setPower(0.0);
+            }
+            // Reverse shooter, spinner, and intake
+            if (gamepad2.backWasPressed()) {
+                spinner.setPower(-1.0);
+                intake.setPower(-1.0);
+                shooter.setPower(-1.0);
+
+                sleep(200);
+
+                stopAllMotors();
+                shooterEnabled = false;
+            }
+            
+
+            // Reverse spinner
+            if (gamepad2.rightBumperWasPressed()) {
+                spinner.setPower(-1.0);
+            } else if (gamepad2.rightBumperWasReleased()) {
+                spinner.setPower(0.0);
+            }
+
+            // =====================================================
+            // RPM-GATED SHOOTER FEEDER
+            // =====================================================
+
+            // Hold GAMEPAD 2 B to feed.
+            // Feeder only runs when shooter reaches target RPM.
+
+            if (gamepad2.b) {
+
+                if (shooterEnabled && atTargetSpeed) {
+
+                    spinner.setPower(FEEDER_POWER);
+                    intake.setPower(1.0);
+
+                } else {
+
+                    spinner.setPower(0.0);
+                    intake.setPower(0.0);
+                }
+            }
+
+            
+
+            // =====================================================
+            // SHOOTING PREP / REVERSE MOTORS
+            // =====================================================
+
+            // Press GAMEPAD 1 BACK to reverse motors briefly.
+            // Moved from left bumper to avoid conflicting with slow mode.
+
+            // =====================================================
+            // TELEMETRY
+            // =====================================================
+
+            telemetry.addLine("===== DRIVE =====");
+
+            telemetry.addData("FL", "%.2f", frontLeftPower);
+            telemetry.addData("FR", "%.2f", frontRightPower);
+            telemetry.addData("BL", "%.2f", backLeftPower);
+            telemetry.addData("BR", "%.2f", backRightPower);
 
             telemetry.addLine("===== SHOOTER =====");
 
-            telemetry.addData("Shooter Enabled", shooterEnabled);
-            telemetry.addData("Target RPM", "%.0f", TARGET_RPM);
-            telemetry.addData("Current RPM", "%.0f", currentRPM);
-            telemetry.addData("RPM Error", "%.0f", rpmError);
-            telemetry.addData("Shooter Power", "%.3f", shooterPower);
-
             telemetry.addData(
                     "Shooter Status",
-                    atTargetSpeed ? "READY TO FIRE" : "SPINNING UP / RECOVERING"
+                    shooterEnabled
+                            ? (atTargetSpeed
+                                ? "READY TO FIRE!"
+                                : "SPINNING UP / RECOVERING")
+                            : (shooterBraking ? "STOPPING" : "OFF")
             );
 
             telemetry.addData(
-                    "Feeder",
-                    feedRequested && shooterEnabled && atTargetSpeed
-                            ? "FEEDING"
-                            : "OFF"
+                    "Target RPM",
+                    "%.0f RPM", targetRPM
+            );
+
+            telemetry.addData(
+                    "Current RPM",
+                    "%.0f RPM", currentRPM
+            );
+
+            telemetry.addData(
+                    "RPM Error",
+                    "%.0f RPM", rpmError
+            );
+
+            telemetry.addData(
+                    "Shooter Power",
+                    "%.3f", shooterPower
             );
 
             telemetry.addData(
@@ -275,228 +367,24 @@ public class AutoMeet2Short extends LinearOpMode {
                     batteryVoltageSensor.getVoltage()
             );
 
-            telemetry.addLine("===== DRIVE =====");
-
-            telemetry.addData("FL", frontLeft.getCurrentPosition());
-            telemetry.addData("FR", frontRight.getCurrentPosition());
-            telemetry.addData("BL", backLeft.getCurrentPosition());
-            telemetry.addData("BR", backRight.getCurrentPosition());
+            telemetry.addData(
+                    "Feeder",
+                    gamepad2.b
+                            ? (shooterEnabled && atTargetSpeed
+                                ? "FEEDING"
+                                : "WAITING FOR RPM")
+                            : "OFF"
+            );
 
             telemetry.update();
         }
-
-        stopAllMotors();
-
-        telemetry.addLine("Path Complete");
-        telemetry.update();
-
-        sleep(1000);
     }
 
-    // SHOOTER VELOCITY CONTROLLER
-    private void updateShooter(boolean feedRequested) {
+    // =====================================================
+    // STOP MOTORS
+    // =====================================================
 
-        double currentTicksPerSec = shooter.getVelocity();
-
-        currentRPM =
-                (currentTicksPerSec * 60.0) /
-                SHOOTER_TICKS_PER_REV;
-
-        rpmError = TARGET_RPM - currentRPM;
-
-        atTargetSpeed =
-                Math.abs(rpmError) <= RPM_TOLERANCE;
-
-        shooterPower = 0;
-
-        if (shooterEnabled) {
-
-            double feedforward =
-                    (TARGET_RPM * kV) + kS;
-
-            double proportional =
-                    rpmError * kP;
-
-            double desired12VPower =
-                    feedforward + proportional;
-
-            double currentVoltage =
-                    batteryVoltageSensor.getVoltage();
-
-            double voltageScale =
-                    currentVoltage > 8.0
-                            ? 12.0 / currentVoltage
-                            : 1.0;
-
-            shooterPower = Range.clip(
-                    desired12VPower * voltageScale,
-                    0.0,
-                    1.0
-            );
-        }
-
-        shooter.setPower(shooterPower);
-
-        // RPM-GATED FEEDER
-        if (feedRequested && shooterEnabled && atTargetSpeed) {
-            spinner.setPower(FEEDER_POWER);
-            intake.setPower(1.0);
-        } else {
-            spinner.setPower(0.0);
-            intake.setPower(0.0);
-        }
-    }
-
-    // HARDWARE INITIALIZATION
-    private void initDrive() {
-
-        frontLeft = hardwareMap.get(DcMotorEx.class, "frontleft");
-        frontRight = hardwareMap.get(DcMotorEx.class, "frontright");
-        backLeft = hardwareMap.get(DcMotorEx.class, "backleft");
-        backRight = hardwareMap.get(DcMotorEx.class, "backright");
-
-        intake = hardwareMap.get(DcMotorEx.class, "intake");
-        shooter = hardwareMap.get(DcMotorEx.class, "shooter");
-        spinner = hardwareMap.get(DcMotorEx.class, "spinner");
-
-        batteryVoltageSensor =
-                hardwareMap.voltageSensor.iterator().next();
-
-        frontLeft.setDirection(DcMotorSimple.Direction.REVERSE);
-        backLeft.setDirection(DcMotorSimple.Direction.REVERSE);
-
-        shooter.setDirection(DcMotorSimple.Direction.FORWARD);
-        spinner.setDirection(DcMotorSimple.Direction.FORWARD);
-
-        for (DcMotorEx motor : new DcMotorEx[]{
-                frontLeft, frontRight, backLeft, backRight
-        }) {
-
-            motor.setZeroPowerBehavior(
-                    DcMotor.ZeroPowerBehavior.BRAKE
-            );
-
-            motor.setMode(
-                    DcMotor.RunMode.STOP_AND_RESET_ENCODER
-            );
-
-            motor.setMode(
-                    DcMotor.RunMode.RUN_USING_ENCODER
-            );
-
-            // Finish moves sooner: count a wheel as done within ~0.5 in
-            // instead of the default 5 ticks, skipping the slow crawl at the end.
-            motor.setTargetPositionTolerance(15);
-        }
-
-        intake.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        shooter.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        spinner.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-
-        intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        shooter.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-
-        intake.setPower(0);
-        shooter.setPower(0);
-        spinner.setPower(0);
-
-    }
-
-    // DRIVE METHODS
-    private void drive(double inches, double power) {
-
-        int ticks = (int) (inches * TICKS_PER_INCH);
-
-        setTargets(ticks, ticks, ticks, ticks);
-
-        runToPosition(power);
-    }
-
-    private void strafe(double inches, double power) {
-
-        int ticks = (int) (
-                inches * TICKS_PER_INCH * STRAFE_MULTIPLIER
-        );
-
-        setTargets(ticks, -ticks, -ticks, ticks);
-
-        runToPosition(power);
-    }
-
-    private void setTargets(
-            int flT,
-            int frT,
-            int blT,
-            int brT) {
-
-        frontLeft.setTargetPosition(
-                frontLeft.getCurrentPosition() + flT
-        );
-
-        frontRight.setTargetPosition(
-                frontRight.getCurrentPosition() + frT
-        );
-
-        backLeft.setTargetPosition(
-                backLeft.getCurrentPosition() + blT
-        );
-
-        backRight.setTargetPosition(
-                backRight.getCurrentPosition() + brT
-        );
-    }
-
-    private void runToPosition(double power) {
-
-        DcMotorEx[] motors = {
-                frontLeft,
-                frontRight,
-                backLeft,
-                backRight
-        };
-
-        for (DcMotorEx motor : motors) {
-
-            if (motor.getMode() != DcMotor.RunMode.RUN_TO_POSITION) {
-                motor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-            }
-
-            motor.setPower(Math.abs(power));
-        }
-    }
-
-    private boolean driveCompleted() {
-
-        return !frontLeft.isBusy()
-                && !frontRight.isBusy()
-                && !backLeft.isBusy()
-                && !backRight.isBusy();
-    }
-
-    // A move is finished when every wheel reaches its target, or after
-    // MOVE_TIMEOUT so one stalled wheel can't freeze the rest of auto.
-    // Relies on runtime being reset each time the state changes.
-    private boolean moveFinished() {
-        return driveCompleted() || runtime.milliseconds() > MOVE_TIMEOUT;
-    }
-
-    private void stopDrive() {
-
-        for (DcMotorEx motor : new DcMotorEx[]{
-                frontLeft, frontRight, backLeft, backRight
-        }) {
-
-            motor.setPower(0);
-            motor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        }
-    }
-
-
-    // STOP ALL MOTORS
     private void stopAllMotors() {
-
-        stopDrive();
 
         if (shooter != null) shooter.setPower(0);
         if (intake != null) intake.setPower(0);
