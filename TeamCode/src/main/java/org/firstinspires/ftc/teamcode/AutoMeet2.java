@@ -5,7 +5,6 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
@@ -14,8 +13,8 @@ import com.qualcomm.robotcore.util.Range;
 public class AutoMeet2 extends LinearOpMode {
 
     // DRIVE CONSTANTS
-    private static final double TICKS_PER_REV = 537.6;
-    private static final double WHEEL_DIAMETER_INCHES = 4.0;
+    private static final double TICKS_PER_REV = 384.5;   // goBILDA 5203 13.7:1 (435 RPM) encoder ticks per output rev
+    private static final double WHEEL_DIAMETER_INCHES = 104.0 / 25.4;   // 104 mm mecanum wheel = 4.094 in
     private static final double GEAR_RATIO = 1.0;
     private static final double CORRECTION_VALUE = 0.92;
     private static final double STRAFE_MULTIPLIER = 1.1;
@@ -125,7 +124,7 @@ public class AutoMeet2 extends LinearOpMode {
                 case MOVE_FORWARD:
 
                     if (!moveStarted) {
-                        drive(-7, DRIVE_SPEED);
+                        drive(-9, DRIVE_SPEED);
                         moveStarted = true;
                     }
 
@@ -162,7 +161,7 @@ public class AutoMeet2 extends LinearOpMode {
                     shooterEnabled = false;
 
                     if (!moveStarted) {
-                        strafe(27, DRIVE_SPEED);
+                        strafe(36, DRIVE_SPEED);
                         moveStarted = true;
                     }
 
@@ -178,7 +177,7 @@ public class AutoMeet2 extends LinearOpMode {
                 case FORWARD:
 
                     if (!moveStarted) {
-                        drive(-60, DRIVE_SPEED);
+                        drive(-85, DRIVE_SPEED);
                         moveStarted = true;
                     }
 
@@ -194,7 +193,7 @@ public class AutoMeet2 extends LinearOpMode {
                 case PARK:
 
                     if (!moveStarted) {
-                        strafe(13, DRIVE_SPEED);
+                        strafe(18, DRIVE_SPEED);
                         moveStarted = true;
                     }
 
