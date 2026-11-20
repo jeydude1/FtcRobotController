@@ -9,7 +9,7 @@ import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
-@Autonomous(name = "Auto Meet 3", group = "Autonomous")
+@Autonomous(name = "Auto Meet 2", group = "Autonomous")
 public class AutoMeet2 extends LinearOpMode {
 
     // DRIVE CONSTANTS
