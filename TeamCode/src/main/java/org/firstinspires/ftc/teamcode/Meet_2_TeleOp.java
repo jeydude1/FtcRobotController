@@ -161,13 +161,15 @@ public class Meet_2_TeleOp extends LinearOpMode {
                 shooterEnabled = !shooterEnabled;
             }
 
-            // Increase target RPM
-            if (gamepad2.dpad_up) {
+            // Increase target RPM by 50 once per press
+            // (dpad_up is true on every loop while held, which added 50
+            // dozens of times per second)
+            if (gamepad2.dpadUpWasPressed()) {
                 targetRPM += 50;
             }
 
-            // Decrease target RPM
-            if (gamepad2.dpad_down) {
+            // Decrease target RPM by 50 once per press
+            if (gamepad2.dpadDownWasPressed()) {
                 targetRPM -= 50;
             }
 
@@ -258,7 +260,15 @@ public class Meet_2_TeleOp extends LinearOpMode {
             } else if (gamepad1.rightTriggerWasReleased()) {
                 intake.setPower(0.0);
             }
-            // Reverse shooter, spinner, and intake
+            
+            // Reverse spinner
+            if (gamepad2.rightBumperWasPressed()) {
+                spinner.setPower(-1.0);
+            } else if (gamepad2.rightBumperWasReleased()) {
+                spinner.setPower(0.0);
+            }
+            
+            // Reverse shooter, spinner, and intake and stops shooter, spinner, and intake after reverse
             if (gamepad2.backWasPressed()) {
                 spinner.setPower(-1.0);
                 intake.setPower(-1.0);
@@ -268,15 +278,7 @@ public class Meet_2_TeleOp extends LinearOpMode {
 
                 stopAllMotors();
                 shooterEnabled = false;
-            }
-            
-
-            // Reverse spinner
-            if (gamepad2.rightBumperWasPressed()) {
-                spinner.setPower(-1.0);
-            } else if (gamepad2.rightBumperWasReleased()) {
-                spinner.setPower(0.0);
-            }
+            }         
 
             // =====================================================
             // RPM-GATED SHOOTER FEEDER
