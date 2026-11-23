@@ -15,11 +15,13 @@ import com.qualcomm.robotcore.util.Range;
 import java.util.List;
 
 /*
- * Meet 3 TeleOp with Limelight 3A auto-aim.
+ * Meet 3 TeleOp with Limelight 3A auto-aim (BIOBUZZ 2026-27).
  *
  * Same controls as Meet 2 TeleOp, plus:
  *   INIT:       Gamepad 1 X = BLUE alliance, Gamepad 1 B = RED alliance
- *   Gamepad 1   LT (hold) = auto-aim: robot turns to face your goal's AprilTag.
+ *               Gamepad 1 D-pad UP = far CELL (opposite the audience),
+ *               Gamepad 1 D-pad DOWN = audience-side CELL
+ *   Gamepad 1   LT (hold) = auto-aim: robot turns to face the chosen CELL.
  *                           You still drive/strafe with the left stick.
  *   Gamepad 2   Y (press) = auto RPM on/off (RPM from distance to the goal).
  *                           Pressing D-pad up/down turns auto RPM off.
@@ -29,7 +31,7 @@ import java.util.List;
  * without the Limelight.
  */
 @TeleOp(name = "Meet 3 TeleOp (Limelight)", group = "TeleOp")
-public class Meet3TeleOpLimelight extends LinearOpMode {
+public class Meet3_TeleOp_Limelight extends LinearOpMode {
 
     // ================= HARDWARE =================
 
@@ -67,11 +69,17 @@ public class Meet3TeleOpLimelight extends LinearOpMode {
 
     // ================= LIMELIGHT =================
 
-    // DECODE goal AprilTag IDs
-    private static final int BLUE_GOAL_TAG_ID = 20;
-    private static final int RED_GOAL_TAG_ID = 24;
+    // BIOBUZZ CELL AprilTag IDs (4 tags per CELL).
+    // Confirm against the current BIOBUZZ Competition Manual / Team Updates.
+    private static final int[] RED_FAR_CELL_TAGS = {30, 31, 32, 33};       // side opposite the audience
+    private static final int[] RED_AUDIENCE_CELL_TAGS = {34, 35, 36, 37};  // audience side
+    private static final int[] BLUE_AUDIENCE_CELL_TAGS = {38, 39, 40, 41}; // audience side
+    private static final int[] BLUE_FAR_CELL_TAGS = {42, 43, 44, 45};      // side opposite the audience
 
-    private int goalTagId = BLUE_GOAL_TAG_ID;
+    // Chosen in INIT
+    private boolean blueAlliance = true;
+    private boolean farCell = true;
+    private int[] targetTags = BLUE_FAR_CELL_TAGS;
 
     // Auto-aim turning (tune on the robot)
     private static final double AIM_KP = 0.02;          // turn power per degree off target
@@ -83,7 +91,7 @@ public class Meet3TeleOpLimelight extends LinearOpMode {
     // MEASURE THESE on your robot and field.
     private static final double CAMERA_HEIGHT_IN = 10.0;    // lens height above the floor
     private static final double CAMERA_ANGLE_DEG = 20.0;    // camera tilt up from level
-    private static final double GOAL_TAG_HEIGHT_IN = 29.5;  // center of the goal tag above the floor
+    private static final double GOAL_TAG_HEIGHT_IN = 29.5;  // PLACEHOLDER: average height of the CELL tags above the floor
 
     // Auto RPM table: distance (in) -> shooter RPM.
     // PLACEHOLDER VALUES: shoot from each distance and record the RPM that scores.
@@ -145,16 +153,19 @@ public class Meet3TeleOpLimelight extends LinearOpMode {
         // ================= INIT: PICK ALLIANCE =================
 
         while (opModeInInit()) {
-            if (gamepad1.x) goalTagId = BLUE_GOAL_TAG_ID;
-            if (gamepad1.b) goalTagId = RED_GOAL_TAG_ID;
+            if (gamepad1.x) blueAlliance = true;
+            if (gamepad1.b) blueAlliance = false;
+            if (gamepad1.dpad_up) farCell = true;
+            if (gamepad1.dpad_down) farCell = false;
+            selectTargetCell();
 
             GoalTarget preview = findGoal();
 
             telemetry.addLine("Meet 3 TeleOp (Limelight) Ready");
             telemetry.addLine("Gamepad 1: X = BLUE, B = RED");
-            telemetry.addData("Alliance",
-                    goalTagId == BLUE_GOAL_TAG_ID ? "BLUE (tag 20)" : "RED (tag 24)");
-            telemetry.addData("Goal tag seen", preview.visible);
+            telemetry.addLine("Gamepad 1: D-pad UP = far CELL, DOWN = audience CELL");
+            telemetry.addData("Target", targetName());
+            telemetry.addData("CELL tags seen", preview.tagCount);
             telemetry.update();
         }
 
@@ -349,8 +360,8 @@ public class Meet3TeleOpLimelight extends LinearOpMode {
             // =====================================================
 
             telemetry.addLine("===== LIMELIGHT =====");
-            telemetry.addData("Alliance",
-                    goalTagId == BLUE_GOAL_TAG_ID ? "BLUE (tag 20)" : "RED (tag 24)");
+            telemetry.addData("Target", targetName());
+            telemetry.addData("CELL tags seen", goal.tagCount);
             if (goal.visible) {
                 telemetry.addData("Goal", aimed ? "AIMED" : "SEEN, NOT AIMED");
                 telemetry.addData("tx (deg off center)", "%.1f", goal.tx);
@@ -394,12 +405,39 @@ public class Meet3TeleOpLimelight extends LinearOpMode {
     /** What the Limelight sees of our alliance's goal tag this loop. */
     private static class GoalTarget {
         boolean visible = false;
-        double tx = 0;          // degrees left(-) / right(+) of center
-        double ty = 0;          // degrees below(-) / above(+) center
-        double distanceIn = 0;  // estimated floor distance to the goal
+        int tagCount = 0;       // how many of the CELL's 4 tags are visible
+        double tx = 0;          // degrees left(-) / right(+) of center (average of visible tags)
+        double ty = 0;          // degrees below(-) / above(+) center (average of visible tags)
+        double distanceIn = 0;  // estimated floor distance to the CELL
     }
 
-    /** Looks for our goal's AprilTag and ignores every other tag (e.g. the obelisk). */
+    /** Picks the 4 tag IDs of the CELL chosen in INIT. */
+    private void selectTargetCell() {
+        if (blueAlliance) {
+            targetTags = farCell ? BLUE_FAR_CELL_TAGS : BLUE_AUDIENCE_CELL_TAGS;
+        } else {
+            targetTags = farCell ? RED_FAR_CELL_TAGS : RED_AUDIENCE_CELL_TAGS;
+        }
+    }
+
+    private String targetName() {
+        return (blueAlliance ? "BLUE " : "RED ")
+                + (farCell ? "far CELL" : "audience CELL")
+                + " (tags " + targetTags[0] + "-" + targetTags[targetTags.length - 1] + ")";
+    }
+
+    private boolean isTargetTag(int id) {
+        for (int t : targetTags) {
+            if (t == id) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Looks for the chosen CELL's AprilTags and ignores every other tag.
+     * If several of the CELL's tags are visible, aims at their average
+     * position, which is roughly the middle of the CELL.
+     */
     private GoalTarget findGoal() {
 
         GoalTarget goal = new GoalTarget();
@@ -409,15 +447,23 @@ public class Meet3TeleOpLimelight extends LinearOpMode {
             return goal;
         }
 
+        double txSum = 0;
+        double tySum = 0;
+
         List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
         for (LLResultTypes.FiducialResult tag : tags) {
-            if (tag.getFiducialId() == goalTagId) {
-                goal.visible = true;
-                goal.tx = tag.getTargetXDegrees();
-                goal.ty = tag.getTargetYDegrees();
-                goal.distanceIn = distanceToGoal(goal.ty);
-                break;
+            if (isTargetTag(tag.getFiducialId())) {
+                txSum += tag.getTargetXDegrees();
+                tySum += tag.getTargetYDegrees();
+                goal.tagCount++;
             }
+        }
+
+        if (goal.tagCount > 0) {
+            goal.visible = true;
+            goal.tx = txSum / goal.tagCount;
+            goal.ty = tySum / goal.tagCount;
+            goal.distanceIn = distanceToGoal(goal.ty);
         }
 
         return goal;
