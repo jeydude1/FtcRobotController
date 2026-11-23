@@ -31,7 +31,7 @@ import java.util.List;
  * without the Limelight.
  */
 @TeleOp(name = "Meet 3 TeleOp (Limelight)", group = "TeleOp")
-public class Meet3_TeleOp_Limelight extends LinearOpMode {
+public class Meet3TeleOpLimelight extends LinearOpMode {
 
     // ================= HARDWARE =================
 
@@ -515,3 +515,4 @@ public class Meet3_TeleOp_Limelight extends LinearOpMode {
         if (spinner != null) spinner.setPower(0);
     }
 }
+
