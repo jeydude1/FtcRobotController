@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
@@ -13,16 +14,12 @@ import com.qualcomm.robotcore.util.Range;
 public class AutoMeet2 extends LinearOpMode {
 
     // DRIVE CONSTANTS
-    private static final double TICKS_PER_REV = 384.5;   // goBILDA 5203 13.7:1 (435 RPM) encoder ticks per output rev
-    private static final double WHEEL_DIAMETER_INCHES = 104.0 / 25.4;   // 104 mm mecanum wheel = 4.094 in
+    private static final double TICKS_PER_REV = 537.6;
+    private static final double WHEEL_DIAMETER_INCHES = 4.0;
     private static final double GEAR_RATIO = 1.0;
     private static final double CORRECTION_VALUE = 0.92;
     private static final double STRAFE_MULTIPLIER = 1.1;
-    private static final double SLOW_DRIVE_SPEED = 0.5;
-    private static final double DRIVE_SPEED = 0.80;
-
-    private static final int DRIVE_TOLERANCE = 20;
-
+    private static final double DRIVE_SPEED = 0.5;
 
     private static final double TICKS_PER_INCH =
             (TICKS_PER_REV * GEAR_RATIO /
@@ -58,7 +55,7 @@ public class AutoMeet2 extends LinearOpMode {
     private static final double FEEDER_POWER = 0.85;
 
     private static final double SHOOTER_READY_TIMEOUT = 3000;
-    private static final double SHOOTING_TIME = 3000;
+    private static final double SHOOTING_TIME = 4000;
 
     private boolean shooterEnabled = false;
     private boolean atTargetSpeed = false;
@@ -93,7 +90,7 @@ public class AutoMeet2 extends LinearOpMode {
 
         initDrive();
 
-        telemetry.addLine("Auto Meet 3 Ready");
+        telemetry.addLine("Auto Meet 2 Ready");
         telemetry.addLine("Velocity Shooter Ready");
         telemetry.update();
 
@@ -113,7 +110,9 @@ public class AutoMeet2 extends LinearOpMode {
             switch (state) {
 
                 case START:
+
                     shooterEnabled = true;
+
                     if (atTargetSpeed ||
                             runtime.milliseconds() > SHOOTER_READY_TIMEOUT) {
 
@@ -126,7 +125,7 @@ public class AutoMeet2 extends LinearOpMode {
                 case MOVE_FORWARD:
 
                     if (!moveStarted) {
-                        drive(-9, SLOW_DRIVE_SPEED);
+                        drive(-7, DRIVE_SPEED);
                         moveStarted = true;
                     }
 
@@ -163,7 +162,7 @@ public class AutoMeet2 extends LinearOpMode {
                     shooterEnabled = false;
 
                     if (!moveStarted) {
-                        strafe(36, DRIVE_SPEED);
+                        strafe(27, DRIVE_SPEED);
                         moveStarted = true;
                     }
 
@@ -179,7 +178,7 @@ public class AutoMeet2 extends LinearOpMode {
                 case FORWARD:
 
                     if (!moveStarted) {
-                        drive(-85, DRIVE_SPEED);
+                        drive(-60, DRIVE_SPEED);
                         moveStarted = true;
                     }
 
@@ -195,7 +194,7 @@ public class AutoMeet2 extends LinearOpMode {
                 case PARK:
 
                     if (!moveStarted) {
-                        strafe(23, DRIVE_SPEED);
+                        strafe(13, DRIVE_SPEED);
                         moveStarted = true;
                     }
 
@@ -449,18 +448,12 @@ public class AutoMeet2 extends LinearOpMode {
 
     private boolean driveCompleted() {
 
-        return Math.abs(frontLeft.getTargetPosition()
-                - frontLeft.getCurrentPosition()) <= DRIVE_TOLERANCE
-
-                && Math.abs(frontRight.getTargetPosition()
-                - frontRight.getCurrentPosition()) <= DRIVE_TOLERANCE
-
-                && Math.abs(backLeft.getTargetPosition()
-                - backLeft.getCurrentPosition()) <= DRIVE_TOLERANCE
-
-                && Math.abs(backRight.getTargetPosition()
-                - backRight.getCurrentPosition()) <= DRIVE_TOLERANCE;
+        return !frontLeft.isBusy()
+                && !frontRight.isBusy()
+                && !backLeft.isBusy()
+                && !backRight.isBusy();
     }
+
     private void stopDrive() {
 
         for (DcMotorEx motor : new DcMotorEx[]{
@@ -468,8 +461,7 @@ public class AutoMeet2 extends LinearOpMode {
         }) {
 
             motor.setPower(0);
-            //Commented to see why robot stalls
-            //motor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            motor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         }
     }
 
