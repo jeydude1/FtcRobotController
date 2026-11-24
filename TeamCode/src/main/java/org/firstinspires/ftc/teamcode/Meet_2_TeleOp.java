@@ -36,7 +36,7 @@ public class Meet_2_TeleOp extends LinearOpMode {
     private static final double TICKS_PER_REV = 28.0;
     private static final double MAX_ACHIEVABLE_RPM = 5200.0;
 
-    private double targetRPM = 2200.0;
+    private double targetRPM = 2250.0;
     private double rpmTolerance = 90.0;
 
     private static final double kV = 1.0 / MAX_ACHIEVABLE_RPM;
@@ -294,7 +294,8 @@ public class Meet_2_TeleOp extends LinearOpMode {
                     spinner.setPower(FEEDER_POWER);
                     intake.setPower(1.0);
 
-                } else {
+               }
+                else {
 
                     spinner.setPower(0.0);
                     intake.setPower(0.0);

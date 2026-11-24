@@ -22,7 +22,7 @@ public class AutoMeet3 extends LinearOpMode {
     private static final double CORRECTION_VALUE = 0.92;
     private static final double STRAFE_MULTIPLIER = 1.1;
     private static final double SLOW_DRIVE_SPEED = 0.5;
-    private static final double DRIVE_SPEED = 0.80;
+    private static final double DRIVE_SPEED = 0.70;
 
     private static final int DRIVE_TOLERANCE = 20;
 
@@ -68,7 +68,7 @@ public class AutoMeet3 extends LinearOpMode {
     private static final double kS = 0.04;
     private static final double kP = 0.0012;
 
-    private static final double TARGET_RPM = 2200.0;
+    private static final double TARGET_RPM = 2270.0;
     private static final double RPM_TOLERANCE = 90.0;
 
     private static final double FEEDER_POWER = 0.85;
@@ -184,6 +184,7 @@ public class AutoMeet3 extends LinearOpMode {
                     shooterEnabled = false;
 
                     if (!moveStarted) {
+                        stopIntake();
                         strafe(36, DRIVE_SPEED);
                         moveStarted = true;
                     }
@@ -352,10 +353,11 @@ public class AutoMeet3 extends LinearOpMode {
         if (feedRequested && shooterEnabled && atTargetSpeed) {
             spinner.setPower(FEEDER_POWER);
             intake.setPower(1.0);
-        } else {
-            spinner.setPower(0.0);
-            intake.setPower(0.0);
         }
+//        else {
+//            spinner.setPower(0.0);
+//            intake.setPower(0.0);
+//        }
     }
 
     // HARDWARE INITIALIZATION
@@ -551,7 +553,10 @@ public class AutoMeet3 extends LinearOpMode {
     private void stopAllMotors() {
 
         stopDrive();
+        stopIntake();
 
+    }
+    private void stopIntake() {
         if (shooter != null) shooter.setPower(0);
         if (intake != null) intake.setPower(0);
         if (spinner != null) spinner.setPower(0);
