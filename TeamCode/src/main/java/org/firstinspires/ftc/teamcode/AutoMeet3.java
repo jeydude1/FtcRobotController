@@ -68,7 +68,7 @@ public class AutoMeet3 extends LinearOpMode {
     private static final double kS = 0.04;
     private static final double kP = 0.0012;
 
-    private static final double TARGET_RPM = 2270.0;
+    private static final double TARGET_RPM = 2250.0;
     private static final double RPM_TOLERANCE = 90.0;
 
     private static final double FEEDER_POWER = 0.85;
@@ -354,10 +354,10 @@ public class AutoMeet3 extends LinearOpMode {
             spinner.setPower(FEEDER_POWER);
             intake.setPower(1.0);
         }
-//        else {
-//            spinner.setPower(0.0);
-//            intake.setPower(0.0);
-//        }
+        else {
+            spinner.setPower(0.0);
+            intake.setPower(0.0);
+        }
     }
 
     // HARDWARE INITIALIZATION
