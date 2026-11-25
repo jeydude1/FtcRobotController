@@ -29,7 +29,7 @@ public class Meet_2_TeleOp extends LinearOpMode {
     private VoltageSensor batteryVoltageSensor;
 
     private static final double BLOCKER_DOWN = 0.2;
-    private static final double BLOCKER_UP = 0.35;
+    private static final double BLOCKER_UP = 0.5;
 
     // ================= SHOOTER CONSTANTS =================
 
@@ -182,7 +182,7 @@ public class Meet_2_TeleOp extends LinearOpMode {
                 shooter.setPower(0);
                 spinner.setPower(0);
                 intake.setPower(0);
-                blocker.setPosition(BLOCKER_UP);
+                blocker.setPosition(BLOCKER_DOWN);
             }
 
             // =====================================================
@@ -249,6 +249,7 @@ public class Meet_2_TeleOp extends LinearOpMode {
             if (gamepad1.rightBumperWasPressed()) {
                 intake.setPower(1.0);
                 spinner.setPower(1.0);
+                blocker.setPosition(BLOCKER_DOWN);
             } else if (gamepad1.rightBumperWasReleased()) {
                 intake.setPower(0.0);
                 spinner.setPower(0.0);
@@ -278,8 +279,12 @@ public class Meet_2_TeleOp extends LinearOpMode {
 
                 stopAllMotors();
                 shooterEnabled = false;
-            }         
-
+            }
+            if (gamepad2.xWasPressed()) {
+                blocker.setPosition(BLOCKER_UP);
+            } else if (gamepad2.yWasPressed()) {
+                blocker.setPosition(BLOCKER_DOWN);
+            }
             // =====================================================
             // RPM-GATED SHOOTER FEEDER
             // =====================================================
@@ -293,7 +298,6 @@ public class Meet_2_TeleOp extends LinearOpMode {
 
                     spinner.setPower(FEEDER_POWER);
                     intake.setPower(1.0);
-
                }
                 else {
 
