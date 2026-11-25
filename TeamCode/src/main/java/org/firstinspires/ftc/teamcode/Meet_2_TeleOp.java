@@ -47,6 +47,10 @@ public class Meet_2_TeleOp extends LinearOpMode {
 
     private boolean shooterEnabled = false;
 
+    // Time to let the blocker servo reach BLOCKER_UP before feeding
+    private static final double BLOCKER_RAISE_MS = 300.0;
+    private ElapsedTime blockerTimer = new ElapsedTime();
+
     // ================= DRIVE =================
 
     private ElapsedTime runtime = new ElapsedTime();
@@ -291,8 +295,19 @@ public class Meet_2_TeleOp extends LinearOpMode {
 
             // Hold GAMEPAD 2 B to feed.
             // Feeder only runs when shooter reaches target RPM.
+            // On the press, raise the blocker and wait 300 ms before feeding.
+            // The wait uses a timer instead of sleep() so the shooter RPM
+            // controller and drive keep updating during the 300 ms.
 
-            if (gamepad2.b) {
+            if (gamepad2.bWasPressed()) {
+                blocker.setPosition(BLOCKER_UP);
+                blockerTimer.reset();
+            }
+
+            boolean blockerRaised =
+                    blockerTimer.milliseconds() >= BLOCKER_RAISE_MS;
+
+            if (gamepad2.b && blockerRaised) {
 
                 if (shooterEnabled && atTargetSpeed) {
 
@@ -366,7 +381,9 @@ public class Meet_2_TeleOp extends LinearOpMode {
             telemetry.addData(
                     "Feeder",
                     gamepad2.b
-                            ? (shooterEnabled && atTargetSpeed
+                            ? (!blockerRaised
+                                ? "RAISING BLOCKER"
+                                : shooterEnabled && atTargetSpeed
                                 ? "FEEDING"
                                 : "WAITING FOR RPM")
                             : "OFF"
