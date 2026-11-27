@@ -48,7 +48,7 @@ public class Meet_2_TeleOp extends LinearOpMode {
     private boolean shooterEnabled = false;
 
     // Time to let the blocker servo reach BLOCKER_UP before feeding
-    private static final double BLOCKER_RAISE_MS = 300.0;
+    private static final double BLOCKER_RAISE_MS = 1000.0;
     private ElapsedTime blockerTimer = new ElapsedTime();
 
     // ================= DRIVE =================
